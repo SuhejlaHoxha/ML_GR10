@@ -37,3 +37,29 @@ def main() -> None:
         quality_report = check_quality(df, "github")
         print_quality_report(quality_report)
         print(f"\n  Step 2 done  ({time.time() - t0:.1f}s)")
+        
+        # ══════════════════════════════════════════════════════════
+        # STEP 3 – MISSING VALUES ANALYSIS & HANDLING
+        # ══════════════════════════════════════════════════════════
+        t0 = time.time()
+        header("STEP 3 · Missing Values Analysis")
+        missing_before = identify_missing(df)
+        total_before   = sum(missing_before.values())
+        print(f"\n  Total missing values (before): {total_before:,}")
+
+        sub("Handling missing values (drop >50%, fill Unknown / median)…")
+        df = handle_missing_values(df, "github")
+        missing_after = identify_missing(df)
+        total_after   = sum(missing_after.values())
+        print(f"  Total missing values (after) : {total_after:,}")
+        print(f"  Step 3 done  ({time.time() - t0:.1f}s)")
+
+        # ══════════════════════════════════════════════════════════
+        # STEP 4 – DATA CLEANING
+        # ══════════════════════════════════════════════════════════
+        t0 = time.time()
+        header("STEP 4 · Data Cleaning")
+        df = clean_data(df, "github")
+        print(f"  Shape after cleaning: {df.shape}")
+        print(f"  Step 4 done  ({time.time() - t0:.1f}s)")
+
