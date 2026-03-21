@@ -175,7 +175,7 @@ Only one dataset (`github.csv`) is available.
 | Events per action type | `pull_request_review_comment.delete` → 47 |
 | Events per organisation | "Unknown" → 1,975 events |
 | Hourly event volume | Peak at 18:00 on Jan 10 (22 events) |
-
+```
 ---
 
 ## Step 7 — Sampling
