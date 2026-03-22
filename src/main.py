@@ -63,3 +63,219 @@ def main() -> None:
         print(f"  Shape after cleaning: {df.shape}")
         print(f"  Step 4 done  ({time.time() - t0:.1f}s)")
 
+        # ══════════════════════════════════════════════════════════
+        # STEP 5 – DATASET INTEGRATION & AGGREGATION
+        # ══════════════════════════════════════════════════════════
+        t0 = time.time()
+        header("STEP 5 · Dataset Integration & Aggregation")
+
+        dataset_integration_note()
+
+        sub("Aggregation 1 – events per actor (top 10):")
+        actor_agg = aggregate_by_actor(df)
+        if not actor_agg.empty:
+            print(actor_agg.head(10).to_string(index=False))
+
+        sub("Aggregation 2 – events per action type (top 10):")
+        action_agg = aggregate_by_action(df)
+        if not action_agg.empty:
+            print(action_agg.head(10).to_string(index=False))
+
+        sub("Aggregation 3 – events per organisation (top 10):")
+        org_agg = aggregate_by_org(df)
+        if not org_agg.empty:
+            print(org_agg.head(10).to_string(index=False))
+
+        ts_col = "@timestamp" if "@timestamp" in df.columns else None
+        if ts_col and pd.api.types.is_datetime64_any_dtype(df[ts_col]):
+            sub("Aggregation 4 – hourly event volume (first 10 hours):")
+            time_agg = aggregate_by_time(df, ts_col, freq="h")
+            if not time_agg.empty:
+                print(time_agg.head(10).to_string(index=False))
+
+        print(f"\n  Step 5 done  ({time.time() - t0:.1f}s)")
+
+        # ══════════════════════════════════════════════════════════
+        # STEP 6 – SAMPLING
+        # ══════════════════════════════════════════════════════════
+        t0 = time.time()
+        header("STEP 6 · Sampling")
+        n_sample = int(len(df) * SAMPLE_FRAC)
+        sub(f"Drawing {int(SAMPLE_FRAC*100)}% stratified sample "
+            f"({n_sample:,} rows)…")
+        df = sample_data(df, n_samples=n_sample,
+                          method="stratified",
+                          stratify_col=TARGET_COL)
+        print(f"  Shape after sampling: {df.shape}")
+        print(f"  Step 6 done  ({time.time() - t0:.1f}s)")
+
+        # ══════════════════════════════════════════════════════════
+        # STEP 7 – ADVANCED PREPROCESSING
+        # ══════════════════════════════════════════════════════════
+        t0 = time.time()
+        header("STEP 7 · Advanced Preprocessing")
+        preprocessor   = AdvancedPreprocessor()
+        original_df    = df.copy()
+
+        sub("7.1 – Creating derived features…")
+        df = preprocessor.create_derived_features(df)
+
+        sub("7.2 – Label encoding categorical columns…")
+        df = preprocessor.encode_categoricals(df)
+
+        sub("7.3 – Discretisation & binarisation…")
+        try:
+            df = preprocessor.discretize_and_binarize(df)
+            print(f"  Shape after discretisation: {df.shape}")
+        except Exception as exc:
+            print(f"  ⚠  Discretisation error: {exc}")
+
+        sub("7.4 – Data transformations…")
+        df = preprocessor.apply_transformations(df)
+
+        sub("7.5 – Dimension reduction (PCA, 95% variance)…")
+        try:
+            df_pca = preprocessor.dimension_reduction(
+                df,
+                target_col=TARGET_COL,
+                method="pca",
+                n_components=0.95,
+                feature_types="numeric",
+            )
+        except Exception as exc:
+            print(f"  ⚠  PCA error: {exc}")
+            df_pca = df.copy()
+
+        sub("7.5 – Dimension reduction (Univariate, top-20 features)…")
+        try:
+            df_selected = preprocessor.dimension_reduction(
+                df,
+                target_col=TARGET_COL,
+                method="univariate",
+                n_components=20,
+                feature_types="numeric",
+            )
+        except Exception as exc:
+            print(f"  ⚠  Univariate selection error: {exc}")
+            df_selected = df.copy()
+
+        summary = preprocessor.get_preprocessing_summary(original_df, df)
+        print(f"\n  Step 7 done  ({time.time() - t0:.1f}s)")
+
+        # ══════════════════════════════════════════════════════════
+        # STEP 8 – EXPLORATORY DATA ANALYSIS
+        # ══════════════════════════════════════════════════════════
+        t0 = time.time()
+        header("STEP 8 · Exploratory Data Analysis (EDA)")
+        eda = EDAAnalyzer(save_plots=True, output_dir=EDA_PLOTS_DIR)
+
+        num_cols = [c for c in df.select_dtypes(include="number").columns
+                    if not c.startswith("outlier_")]
+        cat_cols = df.select_dtypes(include=["object", "category"]).columns.tolist()
+        print(f"  Numeric columns  : {len(num_cols)}")
+        print(f"  Categorical cols : {len(cat_cols)}")
+
+        # 8.1 Summary statistics
+        sub("8.1 – Numerical summary (first 30 cols)…")
+        try:
+            num_summary = eda.numerical_summary(df, num_cols[:30])
+            print(num_summary.head(10).to_string())
+            num_summary.to_csv(os.path.join(EDA_PLOTS_DIR, "numerical_summary.csv"))
+        except Exception as exc:
+            print(f"  ⚠  Numerical summary error: {exc}")
+
+        sub("8.2 – Categorical summary…")
+        try:
+            cat_summary = eda.categorical_summary(df, cat_cols[:15])
+            for col, counts in list(cat_summary.items())[:3]:
+                print(f"\n  {col}:")
+                print(counts.head(8).to_string())
+        except Exception as exc:
+            print(f"  ⚠  Categorical summary error: {exc}")
+
+        # 8.3 Distribution + boxplots
+        sub("8.3 – Distribution & boxplots (top 5 numeric cols)…")
+        try:
+            plot_cols = num_cols[:5]
+            eda.distribution_plots(df, plot_cols)
+            eda.boxplot(df, plot_cols)
+        except Exception as exc:
+            print(f"  ⚠  Distribution/boxplot error: {exc}")
+
+        # 8.4 Correlation matrix
+        sub("8.4 – Correlation matrix…")
+        try:
+            corr_cols = [c for c in num_cols[:25] if df[c].var() > 0]
+            if len(corr_cols) > 1:
+                corr = eda.correlation_matrix(df, columns=corr_cols, figsize=(14, 12))
+                corr.to_csv(os.path.join(EDA_PLOTS_DIR, "correlation_matrix.csv"))
+
+                # Top correlations
+                mask  = np.triu(np.ones_like(corr, dtype=bool), k=1)
+                pairs = [
+                    (corr.columns[i], corr.columns[j], corr.iloc[i, j])
+                    for i in range(len(corr.columns))
+                    for j in range(i+1, len(corr.columns))
+                    if not pd.isna(corr.iloc[i, j])
+                ]
+                pairs.sort(key=lambda x: abs(x[2]), reverse=True)
+                print("  Top 10 strongest correlations:")
+                for c1, c2, v in pairs[:10]:
+                    print(f"    {c1:<35} ↔ {c2:<35} {v:+.3f}")
+        except Exception as exc:
+            print(f"  ⚠  Correlation error: {exc}")
+
+        # 8.5 PCA analysis
+        sub("8.5 – PCA analysis…")
+        try:
+            pca_cols = [c for c in num_cols[:30]
+                        if df[c].var() > 0 and df[c].notna().any()]
+            if len(pca_cols) >= 2:
+                n_pca = min(10, len(pca_cols))
+                pca_df_eda, ev = eda.pca_analysis(df, pca_cols, n_components=n_pca)
+                print(f"  PCA ({n_pca} components) – explained variance:")
+                for i, v in enumerate(ev):
+                    print(f"    PC{i+1}: {v:.2%}  (cumulative: {ev[:i+1].sum():.2%})")
+                labels = df[TARGET_COL].values if TARGET_COL in df.columns else None
+                eda.plot_pca(pca_df_eda.iloc[:, :2], labels=labels)
+                pca_df_eda.to_csv(
+                    os.path.join(EDA_PLOTS_DIR, "pca_components.csv"), index=False
+                )
+        except Exception as exc:
+            print(f"  ⚠  PCA EDA error: {exc}")
+
+        # 8.6 Pairplot
+        sub("8.6 – Pairplot…")
+        try:
+            pair_cols = [c for c in num_cols[:8] if df[c].var() > 0][:5]
+            if len(pair_cols) >= 2:
+                eda.pairplot(df, pair_cols)
+        except Exception as exc:
+            print(f"  ⚠  Pairplot error: {exc}")
+
+        # 8.7 GitHub-specific plots
+        sub("8.7 – GitHub-specific charts…")
+        try:
+            eda.plot_class_distribution(df, TARGET_COL)
+            eda.plot_events_by_hour(df)
+            eda.plot_events_by_dayofweek(df)
+            eda.plot_top_actions(df)
+        except Exception as exc:
+            print(f"  ⚠  GitHub-specific chart error: {exc}")
+
+        # 8.8 Grouped summaries
+        sub("8.8 – Grouped summaries…")
+        try:
+            if "actor" in df.columns and "actor_event_count" in df.columns:
+                gs = eda.grouped_summary(df, "actor", "actor_event_count")
+                print("  actor_event_count by actor (top 10):")
+                print(gs.head(10).to_string())
+        except Exception as exc:
+            print(f"  ⚠  Grouped summary error: {exc}")
+
+        print(f"\n  EDA plots saved → {EDA_PLOTS_DIR}")
+        plots = eda.list_saved_plots()
+        print(f"  Plots generated  : {len(plots)}")
+        for p in plots:
+            print(f"    {p}")
+        print(f"\n  Step 8 done  ({time.time() - t0:.1f}s)")
