@@ -95,13 +95,6 @@ Shape         : 10,000 rows × 590 columns
 Unique actions: 481
 Time range    : Jan 10, 2026 → Mar 11, 2026 (59 days)
 ```
-
-**Type-definition rules applied:**
-- `@timestamp` → converted from epoch-milliseconds to datetime
-- `action`, `operation_type`, `visibility`, `request_category`, `category_type`, `programmatic_access_type`, `method`, `actor_location.country_code` → cast to `category` dtype (saves memory, faster groupby)
-- Identifier columns (`actor_id`, `repo_id`, etc.) → kept as `string`
-- `actor_is_bot`, `is_robot` → numeric binary
-
 ---
 
 ## Step 2 — Data Quality Analysis
@@ -127,13 +120,9 @@ A structured quality report was generated covering missing rates, duplicates, ta
 | `business_secret_scanning_push_protection.enable` | 46 |
 | `team.remove_repository` | 43 |
 
-> `_document_id` has 9,519 repeated values but is a **session/batch identifier**, not a per-event unique key. Every `@timestamp` is unique, confirming all 10,000 rows are distinct events. Full-row deduplication found 0 true duplicates.
-
 ---
 
 ## Step 3 — Missing Values Analysis
-
-575 out of 590 columns contain at least one NaN. The top columns are 100% empty — these are event-specific fields (webhook configs, permission sets, vulnerability rules) that only populate for rare event types.
 
 ```
 Total missing cells  : 5,572,204 across 575 columns
@@ -175,10 +164,7 @@ After cleaning  : 10,000 rows × 25 columns  (0 duplicates removed)
 
 ## Step 6 — Dataset Integration & Aggregation
 
-Only one dataset (`github.csv`) is available — **merging is not required**. This is explicitly documented in the pipeline. If a second source existed (e.g. an actor-profile CSV), it would be integrated via:
-
-```python
-merged = df.merge(actor_profiles, left_on="actor", right_on="username", how="left")
+Only one dataset (`github.csv`) is available. 
 ```
 
 **Aggregations produced:**
@@ -200,8 +186,6 @@ An **80% stratified sample** was drawn using `actor_is_bot` as the stratificatio
 Before : 10,000 rows
 After  :  8,000 rows  (80% stratified sample)
 ```
-
-Stratified sampling was chosen over random sampling to guarantee the bot/human ratio is identical between the full dataset and the working subset — important for unbiased model evaluation.
 
 ---
 
@@ -243,8 +227,6 @@ Stratified sampling was chosen over random sampling to guarantee the bot/human r
 | `RobustScaler` | `actor_event_count` | Robust to extreme outliers in event-count distributions |
 | `log1p` | `actor_event_count`, `actor_event_velocity` | Reduces extreme right-skewness |
 | `sqrt` | `event_hour` | Mild transformation for moderate skewness |
-
-**Shape after all transformations:** 8,000 rows × 65 columns (+40 engineered features)
 
 ---
 
@@ -373,8 +355,6 @@ Five detection methods were applied and combined into a composite score:
 | Rare Categories (`action`) | 8,000 | Categorical |
 | Rare Categories (`operation_type`) | 190 | Categorical |
 
-> The high IQR/Z-Score counts and the 8,000 rare-category flags (all actions appear <1% of the time on 8,000 rows) are expected in this dataset — each of 481 action types appears ~20 times out of 8,000, which is below the 1% threshold. These are structural properties, not anomalies.
-
 **Composite outlier type distribution:**
 
 | Type | Count | % |
@@ -456,5 +436,3 @@ pandas>=2.0 | numpy>=1.24 | scikit-learn>=1.3 | scipy>=1.11 | matplotlib>=3.7 | 
 | 14. **Final output** | — | **8,000 × 20** | **Zero NaN, ML-ready** |
 
 ---
-
-*Machine Learning — Master FIEK, University of Prishtina — 2025/26*
