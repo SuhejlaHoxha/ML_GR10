@@ -7,6 +7,7 @@ from sklearn.preprocessing import (StandardScaler, RobustScaler,
                                    MinMaxScaler, LabelEncoder)
 
 warnings.filterwarnings("ignore")
+
 MAX_LABEL_ENCODE_CARDINALITY = 200
 
 
@@ -73,7 +74,7 @@ class AdvancedPreprocessor:
                 .astype(str)
                 .isin(["Unknown", "nan", ""])
                 .astype(int)
-                .rsub(1)              
+                .rsub(1)                      # flip: 1 = IS programmatic
             )
             created.append("is_programmatic")
 
@@ -90,6 +91,10 @@ class AdvancedPreprocessor:
     # 2. LABEL ENCODING
     # ─────────────────────────────────────────────────────────────
     def encode_categoricals(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Label-encode low-cardinality categorical / object columns.
+        Columns with cardinality > MAX_LABEL_ENCODE_CARDINALITY are skipped.
+        """
         print("  Encoding categorical columns…")
         result = df.copy()
         encoded, skipped = [], []
@@ -117,23 +122,27 @@ class AdvancedPreprocessor:
     # ─────────────────────────────────────────────────────────────
     def discretize_and_binarize(self, df: pd.DataFrame,
                                  config: dict | None = None) -> pd.DataFrame:
+        print("  Discretising and binarising…")
         result = df.copy()
 
         # ── Discretisation config ─────────────────────────────────
         if config is None:
             config = {}
+            # actor_event_count → activity tier
             if "actor_event_count" in result.columns:
                 config["actor_event_count"] = {
                     "method": "quantile",
                     "bins"  : 4,
                     "labels": ["Low", "Medium", "High", "Very High"],
                 }
+            # event_hour → time-of-day bucket
             if "event_hour" in result.columns:
                 config["event_hour"] = {
                     "method": "custom",
                     "bins"  : [-1, 6, 12, 18, 23],
                     "labels": ["Night", "Morning", "Afternoon", "Evening"],
                 }
+            # actor_event_velocity
             if "actor_event_velocity" in result.columns:
                 config["actor_event_velocity"] = {
                     "method": "quantile",
@@ -143,7 +152,7 @@ class AdvancedPreprocessor:
 
         for col, cfg in config.items():
             if col not in result.columns:
-                print(f"'{col}' not found – skipping discretisation.")
+                print(f"    ⚠  '{col}' not found – skipping discretisation.")
                 continue
             try:
                 if cfg["method"] == "quantile":
@@ -160,7 +169,7 @@ class AdvancedPreprocessor:
                       f"  ({cfg['method']}, {cfg['bins']} bins)")
                 self.discretization_bins[col] = cfg
             except Exception as exc:
-                print(f"Discretisation failed for '{col}': {exc}")
+                print(f"    ⚠  Discretisation failed for '{col}': {exc}")
 
         # ── Binarisation ──────────────────────────────────────────
         binarize_cfg = {}
@@ -191,7 +200,7 @@ class AdvancedPreprocessor:
                 print(f"    Binarised '{col}' "
                       f"(threshold={cfg['threshold']}) → '{cfg['name']}'")
             except Exception as exc:
-                print(f"Binarisation failed for '{col}': {exc}")
+                print(f"    ⚠  Binarisation failed for '{col}': {exc}")
 
         print(f"  Shape after discretisation/binarisation: {result.shape}")
         return result
@@ -264,25 +273,24 @@ class AdvancedPreprocessor:
     # ─────────────────────────────────────────────────────────────
     def select_event_subsets(self, df: pd.DataFrame,
                               subset_type: str = "bot_events") -> pd.DataFrame:
-
         print(f"  Selecting subset: '{subset_type}'…")
         original = len(df)
 
         if subset_type == "bot_events":
             if "actor_is_bot" not in df.columns:
-                print("'actor_is_bot' not found.")
+                print("  ⚠  'actor_is_bot' not found.")
                 return df
             subset = df[df["actor_is_bot"] == 1.0].copy()
 
         elif subset_type == "human_events":
             if "actor_is_bot" not in df.columns:
-                print("'actor_is_bot' not found.")
+                print("  ⚠  'actor_is_bot' not found.")
                 return df
             subset = df[df["actor_is_bot"] == 0.0].copy()
 
         elif subset_type == "high_activity":
             if "actor_event_count" not in df.columns:
-                print("'actor_event_count' not found.")
+                print("  ⚠  'actor_event_count' not found.")
                 return df
             threshold = df["actor_event_count"].quantile(0.75)
             subset = df[df["actor_event_count"] >= threshold].copy()
@@ -290,18 +298,18 @@ class AdvancedPreprocessor:
 
         elif subset_type == "weekend_events":
             if "is_weekend" not in df.columns:
-                print("'is_weekend' not found.")
+                print("  ⚠  'is_weekend' not found.")
                 return df
             subset = df[df["is_weekend"] == 1].copy()
 
         elif subset_type == "programmatic":
             if "is_programmatic" not in df.columns:
-                print("'is_programmatic' not found.")
+                print("  ⚠  'is_programmatic' not found.")
                 return df
             subset = df[df["is_programmatic"] == 1].copy()
 
         else:
-            print(f"Unknown subset_type '{subset_type}'.")
+            print(f"  ⚠  Unknown subset_type '{subset_type}'.")
             return df
 
         print(f"    {original:,} → {len(subset):,} rows "
@@ -316,7 +324,6 @@ class AdvancedPreprocessor:
                              method: str = "pca",
                              n_components: int | float = 0.95,
                              feature_types: str = "numeric") -> pd.DataFrame:
-
         print(f"\n  === DIMENSION REDUCTION: {method.upper()} ===")
 
         if feature_types == "numeric":

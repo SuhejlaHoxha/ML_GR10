@@ -1,3 +1,4 @@
+
 import numpy as np
 import pandas as pd
 from scipy.stats import zscore
@@ -8,10 +9,13 @@ from sklearn.neighbors import LocalOutlierFactor
 
 class OutlierDetector:
 
+
     def __init__(self):
         self.summary: dict = {}
 
-    
+    # ─────────────────────────────────────────────────────────────
+    # 1. IQR  (univariate)
+    # ─────────────────────────────────────────────────────────────
     def detect_iqr(self, df: pd.DataFrame, columns: list) -> pd.DataFrame:
         """Flag values outside [Q1 − 1.5×IQR, Q3 + 1.5×IQR]."""
         for col in columns:
@@ -25,7 +29,9 @@ class OutlierDetector:
             self.summary[f"iqr_{col}"] = int(df[flag].sum())
         return df
 
-  
+    # ─────────────────────────────────────────────────────────────
+    # 2. Z-SCORE  (univariate)
+    # ─────────────────────────────────────────────────────────────
     def detect_zscore(self, df: pd.DataFrame,
                        columns: list,
                        threshold: float = 3.0) -> pd.DataFrame:
@@ -39,11 +45,13 @@ class OutlierDetector:
             self.summary[f"zscore_{col}"] = int(df[flag].sum())
         return df
 
-
+    # ─────────────────────────────────────────────────────────────
+    # 3. ISOLATION FOREST  (multivariate)
+    # ─────────────────────────────────────────────────────────────
     def detect_isolation_forest(self, df: pd.DataFrame,
                                   features: list,
                                   contamination: float = 0.035) -> pd.DataFrame:
-    
+
         X = df[features].fillna(0).values
         iso = IsolationForest(
             n_estimators=250,
@@ -57,7 +65,9 @@ class OutlierDetector:
         print(f"    Isolation Forest outliers: {self.summary['isolation_forest']:,}")
         return df
 
-
+    # ─────────────────────────────────────────────────────────────
+    # 4. LOCAL OUTLIER FACTOR  (multivariate)
+    # ─────────────────────────────────────────────────────────────
     def detect_lof(self, df: pd.DataFrame,
                     features: list,
                     contamination: float = 0.035) -> pd.DataFrame:
@@ -73,11 +83,13 @@ class OutlierDetector:
         print(f"    LOF outliers: {self.summary['lof']:,}")
         return df
 
-
+    # ─────────────────────────────────────────────────────────────
+    # 5. MAHALANOBIS DISTANCE  (on PCA components)
+    # ─────────────────────────────────────────────────────────────
     def detect_mahalanobis(self, df: pd.DataFrame,
                             pca_components: list,
                             threshold: float = 3.5) -> pd.DataFrame:
-                              
+    
         if len(pca_components) < 2:
             print("    ⚠  Mahalanobis skipped: need ≥ 2 PCA components.")
             return df
@@ -96,6 +108,9 @@ class OutlierDetector:
         print(f"    Mahalanobis outliers: {self.summary['mahalanobis']:,}")
         return df
 
+    # ─────────────────────────────────────────────────────────────
+    # 6. RARE CATEGORIES
+    # ─────────────────────────────────────────────────────────────
     def detect_rare_categories(self, df: pd.DataFrame,
                                  column: str,
                                  min_freq: float = 0.01) -> pd.DataFrame:
@@ -110,7 +125,9 @@ class OutlierDetector:
         print(f"    Rare-category outliers in '{column}': {self.summary[flag]:,}")
         return df
 
-
+    # ─────────────────────────────────────────────────────────────
+    # 7. COMBINED OUTLIER SCORE
+    # ─────────────────────────────────────────────────────────────
     def compute_outlier_score(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Sum all boolean outlier flags into a single composite score.
@@ -129,16 +146,22 @@ class OutlierDetector:
 
     @staticmethod
     def map_outlier_type(score: int) -> str:
+        """Map composite score to a human-readable severity label."""
         if score == 0:   return "normal"
         elif score == 1: return "mild"
         elif score == 2: return "strong"
         else:            return "extreme"
 
-
+    # ─────────────────────────────────────────────────────────────
+    # 8. VALIDATION & FALSE-POSITIVE FILTERING
+    # ─────────────────────────────────────────────────────────────
     def validate_outliers(self, df: pd.DataFrame,
                            min_agreement: int = 2,
                            use_multivariate: bool = True) -> pd.DataFrame:
-
+        """
+        Mark an outlier as 'validated' only when ≥ min_agreement
+        detection methods agree.
+        """
         uni_flags  = [c for c in df.columns
                       if c.startswith("outlier_")
                       and ("iqr_" in c or "zscore_" in c)]
@@ -171,7 +194,12 @@ class OutlierDetector:
                                   min_agreement: int = 2,
                                   confidence_threshold: float = 0.5
                                   ) -> pd.DataFrame:
+        """
+        Mark confirmed outliers using the chosen filtering strategy.
 
+        method = 'agreement'  – outlier_validated must be True
+        method = 'confidence' – outlier_score / max_possible >= threshold
+        """
         if method == "agreement":
             df = self.validate_outliers(df, min_agreement=min_agreement)
             df["outlier_confirmed"] = df.get("outlier_validated",
@@ -215,6 +243,7 @@ class OutlierDetector:
                          min_agreement: int = 2,
                          remove_extreme_only: bool = False,
                          keep_flags: bool = True) -> pd.DataFrame:
+        """Remove confirmed outliers from the dataframe."""
         original = len(df)
         df = self.filter_false_detections(df, method=method,
                                            min_agreement=min_agreement)
@@ -239,7 +268,11 @@ class OutlierDetector:
               f"({self.summary['removal_rate']:.2f}%)")
         return cleaned
 
+    # ─────────────────────────────────────────────────────────────
+    # 9. REPORTING
+    # ─────────────────────────────────────────────────────────────
     def get_false_detection_report(self, df: pd.DataFrame) -> dict:
+        """Return a dict summarising detection quality metrics."""
         report: dict = {}
         score_col  = "outlier_score"
         fp_col     = "outlier_false_positive"
@@ -276,4 +309,5 @@ class OutlierDetector:
         return report
 
     def get_summary(self) -> dict:
+        """Return the internal summary dict."""
         return self.summary

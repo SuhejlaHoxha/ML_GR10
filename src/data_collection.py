@@ -1,80 +1,66 @@
 import pandas as pd
-import numpy as np
+from pathlib import Path
+
+TIMESTAMP_COLS   = ["@timestamp"]    
+DATETIME_COLS    = ["created_at", "updated_at", "deleted_at",
+                    "started_at", "completed_at", "cancelled_at"]
+IDENTIFIER_COLS  = ["_document_id", "actor_id", "repo_id", "org_id",
+                    "user_id", "business_id", "request_id",
+                    "pull_request_id", "workflow_id", "server_id",
+                    "integration_id", "hook_id", "alert_id"]
+CATEGORY_COLS    = ["action", "operation_type", "visibility",
+                    "request_category", "category_type",
+                    "programmatic_access_type", "method",
+                    "actor_location.country_code"]
+BOOLEAN_COLS     = ["actor_is_bot", "is_robot", "public_repo",
+                    "actor_is_agent", "read_only", "active",
+                    "prerelease", "enabled"]
 
 
-def check_quality(df: pd.DataFrame, dataset_name: str = "github") -> dict:
-    report: dict = {
-        "dataset"      : dataset_name,
-        "rows"         : len(df),
-        "columns"      : len(df.columns),
-        "missing_values": df.isnull().sum().to_dict(),
-        "duplicates"   : int(df.duplicated().sum()),
-        "numeric_stats": df.select_dtypes(include="number").describe().to_dict(),
-    }
+def load_dataset(file_path: str) -> pd.DataFrame | None:
+    path = Path(file_path)
+    if not path.exists():
+        print(f"  File not found: {path}")
+        return None
 
-    # Duplicate event IDs
-    if "_document_id" in df.columns:
-        report["duplicate_event_ids"] = int(df["_document_id"].duplicated().sum())
-
-    # actor_is_bot completeness
-    if "actor_is_bot" in df.columns:
-        total  = len(df)
-        filled = int(df["actor_is_bot"].notna().sum())
-        report["bot_flag_completeness"] = {
-            "filled"    : filled,
-            "missing"   : total - filled,
-            "pct_filled": round(filled / total * 100, 2),
-        }
-
-    # Temporal range of events
-    ts_col = "@timestamp" if "@timestamp" in df.columns else None
-    if ts_col and pd.api.types.is_datetime64_any_dtype(df[ts_col]):
-        report["temporal_range"] = {
-            "earliest": str(df[ts_col].min()),
-            "latest"  : str(df[ts_col].max()),
-            "span_days": int((df[ts_col].max() - df[ts_col].min()).days),
-        }
-
-    # Action-type distribution
-    if "action" in df.columns:
-        top_actions = df["action"].value_counts().head(10).to_dict()
-        report["action_cardinality"] = {
-            "unique_actions": int(df["action"].nunique()),
-            "top_10"        : top_actions,
-        }
-
-    # Overall missing-rate
-    total_cells = df.shape[0] * df.shape[1]
-    total_missing = int(df.isnull().sum().sum())
-    report["missing_rate_pct"] = round(total_missing / total_cells * 100, 2)
-
-    return report
+    print(f"  Loading: {path.name}")
+    try:
+        df = pd.read_csv(path, low_memory=False)
+        print(f"  Loaded {path.name}: {len(df):,} rows × {len(df.columns)} columns")
+        return df
+    except Exception as exc:
+        print(f"  Error loading {path.name}: {exc}")
+        return None
 
 
-def print_quality_report(report: dict) -> None:
-    """Pretty-print a quality report returned by check_quality()."""
-    print(f"\n  Quality Report – '{report['dataset']}'")
-    print(f"    Rows                : {report['rows']:,}")
-    print(f"    Columns             : {report['columns']:,}")
-    print(f"    Overall missing     : {report['missing_rate_pct']:.2f}% of all cells")
-    print(f"    Duplicate rows      : {report['duplicates']:,}")
+def define_data_types(df: pd.DataFrame, dataset_name: str = "github") -> pd.DataFrame:
+    print(f"\n  Defining data types for '{dataset_name}' ({len(df):,} rows)…")
 
-    if "duplicate_event_ids" in report:
-        print(f"    Duplicate event IDs : {report['duplicate_event_ids']:,}")
+    for col in TIMESTAMP_COLS:
+        if col in df.columns:
+            df[col] = pd.to_datetime(df[col], unit="ms", errors="coerce")
+            print(f"    → {col}: epoch-ms → datetime")
 
-    if "bot_flag_completeness" in report:
-        bc = report["bot_flag_completeness"]
-        print(f"    actor_is_bot filled : {bc['filled']:,} / {report['rows']:,}"
-              f"  ({bc['pct_filled']}%)")
+    for col in DATETIME_COLS:
+        if col in df.columns:
+            df[col] = pd.to_datetime(df[col], errors="coerce")
+            print(f"    → {col}: str → datetime")
 
-    if "temporal_range" in report:
-        tr = report["temporal_range"]
-        print(f"    Event time range    : {tr['earliest']}  →  {tr['latest']}"
-              f"  ({tr['span_days']} days)")
+    for col in IDENTIFIER_COLS:
+        if col in df.columns:
+            df[col] = df[col].astype(str)
 
-    if "action_cardinality" in report:
-        ac = report["action_cardinality"]
-        print(f"    Unique action types : {ac['unique_actions']:,}")
-        print("    Top 5 actions:")
-        for action, cnt in list(ac["top_10"].items())[:5]:
-            print(f"      {action:<55} {cnt:>5}")
+    for col in CATEGORY_COLS:
+        if col in df.columns:
+            df[col] = df[col].astype("category")
+            print(f"    → {col}: → category ({df[col].nunique()} unique)")
+
+    for col in BOOLEAN_COLS:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    print(f"\n  '{dataset_name}' shape after type definition : {df.shape}")
+    print("  Column-type summary:")
+    print("  " + df.dtypes.value_counts().to_string().replace("\n", "\n  "))
+    print("  " + "-" * 56)
+    return df

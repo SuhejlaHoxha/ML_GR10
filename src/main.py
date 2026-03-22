@@ -1,3 +1,118 @@
+"""
+main.py
+=======
+GitHub Activity-Log – Data Preparation Pipeline (Phase I)
+Master's Course – Machine Learning Project
+
+Orchestrates all preprocessing steps in the same modular style as
+the reference project (Airbnb listings) but applied to the GitHub
+
+Steps
+─────
+ 1.  Data Collection     – load CSV, define data types
+ 2.  Data Quality        – quality report
+ 3.  Missing Values      – analysis (identify) + handling (drop / fill)
+ 4.  Data Cleaning       – deduplication, column-name standardisation
+ 5.  Dataset Integration – explicit single-source note + aggregation
+ 6.  Sampling            – 80 % stratified sample
+ 7.  Advanced Preprocessing
+        7.1  Derived feature creation
+        7.2  Label encoding
+        7.3  Discretisation & binarisation
+        7.4  Data transformations (scaling, log, sqrt)
+        7.5  Dimension reduction (PCA + univariate selection)
+ 8.  EDA                 – summary stats, distributions, correlation,
+                           PCA plot, class distribution, temporal charts
+ 9.  Class Imbalance     – detection + SMOTE + ADASYN
+10.  Outlier Detection   – IQR, Z-Score, Isolation Forest, LOF,
+                           Mahalanobis, rare categories, combined score,
+                           false-positive filtering
+11.  Subset Selection    – relevant feature subset for ML
+12.  Save                – processed_github.csv
+
+Run
+───
+    python src/main.py
+
+The script expects github.csv to be located at:
+    <project_root>/unprocessed dataset/github.csv
+
+Outputs are written to:
+    <project_root>/processed dataset/processed_github.csv
+    <project_root>/eda_plots/
+"""
+
+import os
+import sys
+import time
+import traceback
+import numpy as np
+import pandas as pd
+
+# ── Ensure src/ is on the path when running directly ──────────────────
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from data_collection      import load_dataset, define_data_types
+from data_quality         import check_quality, print_quality_report
+from cleaning             import clean_data, identify_missing, handle_missing_values
+from integration          import (dataset_integration_note,
+                                   aggregate_by_actor, aggregate_by_action,
+                                   aggregate_by_time, aggregate_by_org,
+                                   sample_data)
+from advanced_preprocessing import AdvancedPreprocessor
+from eda_analyzer           import EDAAnalyzer
+from class_balancing        import apply_resampling
+from outlier_detection      import OutlierDetector
+
+
+# ─────────────────────────────────────────────────────────────────────
+# CONFIGURATION
+# ─────────────────────────────────────────────────────────────────────
+ROOT_DIR        = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_PATH       = os.path.join(ROOT_DIR, "unprocessed dataset", "github.csv")
+PROCESSED_DIR   = os.path.join(ROOT_DIR, "processed dataset")
+EDA_PLOTS_DIR   = os.path.join(ROOT_DIR, "eda_plots")
+OUTPUT_CSV      = os.path.join(PROCESSED_DIR, "processed_github.csv")
+
+TARGET_COL      = "actor_is_bot"
+SAMPLE_FRAC     = 0.80          # 80 % of rows kept after sampling
+RANDOM_SEED     = 42
+
+# Columns selected for the final ML-ready subset
+FINAL_FEATURES  = [
+    "action", "actor", "actor_id",
+    "actor_is_bot",                 # TARGET
+    "operation_type", "visibility",
+    "repo", "repo_id", "org", "org_id",
+    "user_agent", "is_robot",
+    "programmatic_access_type",
+    "request_category",
+    # Engineered temporals
+    "event_hour", "event_dayofweek",
+    "event_month", "event_year", "is_weekend",
+    # Actor-level aggregates
+    "actor_event_count", "actor_bot_ratio",
+    "actor_event_velocity",
+    # Automation indicators
+    "is_programmatic", "is_integration_event",
+    # Outlier flag
+    "is_outlier",
+]
+
+
+# ─────────────────────────────────────────────────────────────────────
+def header(title: str) -> None:
+    width = 68
+    print(f"\n{'=' * width}")
+    print(f"  {title}")
+    print(f"{'=' * width}")
+
+
+def sub(msg: str) -> None:
+    print(f"\n  ► {msg}")
+
+
+# ─────────────────────────────────────────────────────────────────────
 def main() -> None:
     os.makedirs(PROCESSED_DIR, exist_ok=True)
     os.makedirs(EDA_PLOTS_DIR, exist_ok=True)
@@ -37,7 +152,7 @@ def main() -> None:
         quality_report = check_quality(df, "github")
         print_quality_report(quality_report)
         print(f"\n  Step 2 done  ({time.time() - t0:.1f}s)")
-        
+
         # ══════════════════════════════════════════════════════════
         # STEP 3 – MISSING VALUES ANALYSIS & HANDLING
         # ══════════════════════════════════════════════════════════
@@ -329,7 +444,7 @@ def main() -> None:
                          if c not in exclude_ids
                          and not c.startswith("outlier_")]
 
-        
+        # Key columns for IQR / Z-Score (higher variance → more informative)
         key_cols = [c for c in meaningful
                     if any(kw in c.lower()
                            for kw in ["count", "velocity", "ratio",
@@ -360,7 +475,7 @@ def main() -> None:
         except Exception as exc:
             print(f"  ⚠  Z-Score error: {exc}")
 
-        
+        # Feature matrix for multivariate methods
         feat_cols = [c for c in meaningful if df[c].var() > 0][:50]
 
         sub("10.3 – Isolation Forest…")
@@ -421,7 +536,9 @@ def main() -> None:
             print(f"  ⚠  False-detection filter error: {exc}")
             traceback.print_exc()
 
-
+        # Step 10 only labels outliers; it does not remove rows from df.
+        # This keeps the pipeline transparent and avoids accidental data loss.
+        # Convenience binary column for the final dataset
         if "outlier_confirmed" in df.columns:
             df["is_outlier"] = df["outlier_confirmed"].astype(int)
         elif "outlier_score" in df.columns:
@@ -432,12 +549,14 @@ def main() -> None:
         print(f"\n  Dataset shape after outlier detection: {df.shape}")
         print(f"  Step 10 done  ({time.time() - t0:.1f}s)")
 
-
+        # ══════════════════════════════════════════════════════════
+        # STEP 11 – SUBSET SELECTION
+        # ══════════════════════════════════════════════════════════
         t0 = time.time()
         header("STEP 11 · Subset Selection – Final Feature Set")
 
         selected = [c for c in FINAL_FEATURES if c in df.columns]
-
+        # Ensure target is always present
         if TARGET_COL not in selected and TARGET_COL in df.columns:
             selected.insert(0, TARGET_COL)
 
@@ -448,10 +567,13 @@ def main() -> None:
         print(f"  Final subset shape: {df_final.shape}")
         print(f"  Step 11 done  ({time.time() - t0:.1f}s)")
 
-
+        # ══════════════════════════════════════════════════════════
+        # STEP 12 – SAVE PROCESSED DATASET
+        # ══════════════════════════════════════════════════════════
         t0 = time.time()
         header("STEP 12 · Save Processed Dataset")
 
+        # Final clean-up
         if TARGET_COL in df_final.columns:
             before = len(df_final)
             df_final = df_final.dropna(subset=[TARGET_COL])
@@ -459,11 +581,11 @@ def main() -> None:
 
         df_final = df_final.reset_index(drop=True)
 
-
+        # Verify no NaN remains
         remaining_nan = df_final.isnull().sum().sum()
         print(f"  Remaining NaN values : {remaining_nan}")
 
-
+        # Save
         df_final.to_csv(OUTPUT_CSV, index=False)
         print(f"\n  ✓ Processed dataset saved → {OUTPUT_CSV}")
         print(f"  Final shape : {df_final.shape[0]:,} rows × "
@@ -474,7 +596,9 @@ def main() -> None:
                 print(f"    {cls} → {cnt:,}  ({cnt/len(df_final)*100:.1f}%)")
         print(f"\n  Step 12 done  ({time.time() - t0:.1f}s)")
 
-
+        # ══════════════════════════════════════════════════════════
+        # PIPELINE SUMMARY
+        # ══════════════════════════════════════════════════════════
         header("PIPELINE COMPLETE")
         print(f"""
   Output files

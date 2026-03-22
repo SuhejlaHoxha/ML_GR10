@@ -1,3 +1,4 @@
+
 import os
 import numpy as np
 import pandas as pd
@@ -10,6 +11,8 @@ from sklearn.decomposition import PCA
 
 
 class EDAAnalyzer:
+
+
     def __init__(self, save_plots: bool = True, output_dir: str = "eda_plots"):
         self.summary:    dict = {}
         self.save_plots: bool = save_plots
@@ -31,6 +34,7 @@ class EDAAnalyzer:
     # ─────────────────────────────────────────────────────────────
     def numerical_summary(self, df: pd.DataFrame,
                            columns: list | None = None) -> pd.DataFrame:
+        """Compute describe() + skewness + kurtosis + missing count."""
         if columns is None:
             columns = df.select_dtypes(include=["float64", "int64"]).columns.tolist()
         summary = df[columns].describe().T
@@ -42,6 +46,7 @@ class EDAAnalyzer:
 
     def categorical_summary(self, df: pd.DataFrame,
                              columns: list | None = None) -> dict:
+        """Value-count tables for categorical columns."""
         if columns is None:
             columns = df.select_dtypes(
                 include=["object", "category"]
@@ -54,6 +59,7 @@ class EDAAnalyzer:
     # 2. UNIVARIATE PLOTS
     # ─────────────────────────────────────────────────────────────
     def distribution_plots(self, df: pd.DataFrame, columns: list) -> None:
+        """Histogram + KDE for each numeric column."""
         for col in columns:
             if col not in df.columns:
                 continue
@@ -65,6 +71,7 @@ class EDAAnalyzer:
             self._save(f"dist_{col}.png")
 
     def boxplot(self, df: pd.DataFrame, columns: list) -> None:
+        """Box-and-whisker plot for each numeric column."""
         for col in columns:
             if col not in df.columns:
                 continue
@@ -80,6 +87,7 @@ class EDAAnalyzer:
     def correlation_matrix(self, df: pd.DataFrame,
                             columns: list | None = None,
                             figsize: tuple = (12, 10)) -> pd.DataFrame:
+        """Compute and plot a correlation heatmap."""
         if columns is None:
             columns = df.select_dtypes(
                 include=["float64", "int64"]
@@ -97,6 +105,7 @@ class EDAAnalyzer:
     def pairplot(self, df: pd.DataFrame,
                   columns: list,
                   hue: str | None = None) -> None:
+        """Seaborn pairplot (use a sample to keep it fast)."""
         data = df[columns].dropna()
         if len(data) > 1000:
             data = data.sample(n=1000, random_state=42)
@@ -110,6 +119,7 @@ class EDAAnalyzer:
     def pca_analysis(self, df: pd.DataFrame,
                       columns: list,
                       n_components: int = 2) -> tuple:
+        """Run PCA and return (component_df, explained_variance_ratio)."""
         scaler = StandardScaler()
         X = scaler.fit_transform(df[columns].fillna(df[columns].mean()))
         pca = PCA(n_components=n_components)
@@ -124,6 +134,7 @@ class EDAAnalyzer:
 
     def plot_pca(self, pca_df: pd.DataFrame,
                   labels=None) -> None:
+        """Scatter plot of first two PCA components."""
         fig, ax = plt.subplots(figsize=(9, 6))
         sc = ax.scatter(pca_df.iloc[:, 0], pca_df.iloc[:, 1],
                         c=labels, cmap="coolwarm", alpha=0.5, s=8)
@@ -140,6 +151,7 @@ class EDAAnalyzer:
     def grouped_summary(self, df: pd.DataFrame,
                          group_col: str,
                          target_col: str) -> pd.DataFrame:
+        """Group by group_col and compute descriptive stats for target_col."""
         grouped = df.groupby(group_col, observed=True)[target_col].agg(
             ["mean", "median", "std", "count"]
         )
@@ -151,6 +163,7 @@ class EDAAnalyzer:
     # ─────────────────────────────────────────────────────────────
     def plot_class_distribution(self, df: pd.DataFrame,
                                  target_col: str = "actor_is_bot") -> None:
+        """Bar chart of class counts for the binary target."""
         if target_col not in df.columns:
             print(f"  ⚠  '{target_col}' not in dataframe.")
             return
@@ -174,6 +187,7 @@ class EDAAnalyzer:
 
     def plot_events_by_hour(self, df: pd.DataFrame,
                              hour_col: str = "event_hour") -> None:
+        """Bar chart of events by hour of day."""
         if hour_col not in df.columns:
             return
         fig, ax = plt.subplots(figsize=(10, 4))
@@ -187,6 +201,7 @@ class EDAAnalyzer:
 
     def plot_events_by_dayofweek(self, df: pd.DataFrame,
                                   dow_col: str = "event_dayofweek") -> None:
+        """Bar chart of events by day of week (0=Mon … 6=Sun)."""
         if dow_col not in df.columns:
             return
         day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
@@ -202,6 +217,7 @@ class EDAAnalyzer:
     def plot_top_actions(self, df: pd.DataFrame,
                           action_col: str = "action",
                           top_n: int = 15) -> None:
+        """Horizontal bar chart of top N action types."""
         if action_col not in df.columns:
             return
         counts = df[action_col].value_counts().head(top_n)
@@ -216,6 +232,10 @@ class EDAAnalyzer:
                                     before: dict,
                                     after_smote: dict,
                                     after_adasyn: dict) -> None:
+        """
+        Three-panel bar chart comparing class counts:
+        Original | After SMOTE | After ADASYN
+        """
         fig, axes = plt.subplots(1, 3, figsize=(15, 4))
         labels = ["Human (0)", "Bot (1)"]
         colours = ["#5b9bd5", "#e07070"]

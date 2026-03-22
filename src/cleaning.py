@@ -3,6 +3,7 @@ from sklearn.impute import SimpleImputer
 
 MISSING_DROP_THRESHOLD = 0.50
 
+
 def clean_data(df: pd.DataFrame, dataset_name: str = "github") -> pd.DataFrame:
     print(f"  Cleaning '{dataset_name}'...")
 
