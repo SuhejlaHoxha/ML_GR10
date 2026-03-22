@@ -48,7 +48,7 @@ The entire pipeline is written in modular Python (no Jupyter notebooks) as a `sr
 - Class imbalance: **84.95% human** vs **15.05% bot**
 - 572 columns have 100% missing values (event-specific fields)
 
-## 📂 Repository Structure
+## Repository Structure
 
 ```
 github-ml-pipeline/
@@ -82,7 +82,7 @@ github-ml-pipeline/
 
 ---
 
-# 📋 Phase I — Data Preparation
+# Phase I — Data Preparation
 
 ---
 
@@ -411,7 +411,7 @@ Confirmed outliers are flagged via the `is_outlier` column in the final dataset 
 
 ---
 
-## ▶️ How to Run
+## How to Run
 
 ```bash
 # Install dependencies
@@ -428,7 +428,7 @@ python main.py
 
 ---
 
-## 🔧 Requirements
+## Requirements
 
 ```
 pandas>=2.0 | numpy>=1.24 | scikit-learn>=1.3 | scipy>=1.11 | matplotlib>=3.7 | seaborn>=0.12
@@ -436,7 +436,7 @@ pandas>=2.0 | numpy>=1.24 | scikit-learn>=1.3 | scipy>=1.11 | matplotlib>=3.7 | 
 
 ---
 
-## 📊 Phase I — Results Summary
+## Phase I — Results Summary
 
 | Step | Input | Output | Key Result |
 |------|-------|--------|------------|
