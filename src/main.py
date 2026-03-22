@@ -279,3 +279,218 @@ def main() -> None:
         for p in plots:
             print(f"    {p}")
         print(f"\n  Step 8 done  ({time.time() - t0:.1f}s)")
+
+        # ══════════════════════════════════════════════════════════
+        # STEP 9 – CLASS IMBALANCE & RESAMPLING
+        # ══════════════════════════════════════════════════════════
+        t0 = time.time()
+        header("STEP 9 · Class Imbalance Detection & Resampling (SMOTE / ADASYN)")
+
+        if TARGET_COL in df.columns:
+            counts = df[TARGET_COL].value_counts().sort_index()
+            print(f"\n  Target: '{TARGET_COL}'")
+            print(f"  {'Class':<10} {'Count':>8}  {'%':>8}")
+            print(f"  {'-'*30}")
+            for cls, cnt in counts.items():
+                print(f"  {cls!s:<10} {cnt:>8,}  {cnt/len(df)*100:>7.2f}%")
+            ratio = counts.max() / max(counts.min(), 1)
+            print(f"\n  Imbalance ratio ≈ {ratio:.1f} : 1")
+            print("  ⚠  Imbalance detected → applying SMOTE and ADASYN.")
+
+            sub("Applying SMOTE and ADASYN…")
+            df_smote, df_adasyn = apply_resampling(
+                df, target_col=TARGET_COL, seed=RANDOM_SEED
+            )
+
+            # Before/after comparison chart
+            before_dist   = df[TARGET_COL].value_counts().to_dict()
+            smote_dist    = df_smote[TARGET_COL].value_counts().to_dict()
+            adasyn_dist   = df_adasyn[TARGET_COL].value_counts().to_dict()
+            eda.plot_resampling_comparison(before_dist, smote_dist, adasyn_dist)
+        else:
+            print(f"  ⚠  Target column '{TARGET_COL}' not found.")
+
+        print(f"\n  Step 9 done  ({time.time() - t0:.1f}s)")
+
+        # ══════════════════════════════════════════════════════════
+        # STEP 10 – OUTLIER DETECTION
+        # ══════════════════════════════════════════════════════════
+        t0 = time.time()
+        header("STEP 10 · Outlier Detection")
+        detector = OutlierDetector()
+
+        # Select meaningful numeric columns
+        exclude_ids   = {"_document_id", "actor_id", "repo_id",
+                         "org_id", "user_id", "business_id",
+                         "request_id", "pull_request_id",
+                         "workflow_id", "server_id"}
+        all_num       = df.select_dtypes(include="number").columns.tolist()
+        meaningful    = [c for c in all_num
+                         if c not in exclude_ids
+                         and not c.startswith("outlier_")]
+
+        
+        key_cols = [c for c in meaningful
+                    if any(kw in c.lower()
+                           for kw in ["count", "velocity", "ratio",
+                                      "hour", "bot", "score",
+                                      "event", "active"])]
+        if len(key_cols) > 15:
+            key_cols = sorted(key_cols,
+                              key=lambda c: df[c].var(),
+                              reverse=True)[:15]
+
+        print(f"  Key columns for IQR / Z-Score: {len(key_cols)}")
+
+        sub("10.1 – IQR outlier detection…")
+        try:
+            df = detector.detect_iqr(df, key_cols)
+            iqr_total = sum(v for k, v in detector.get_summary().items()
+                            if k.startswith("iqr_"))
+            print(f"  Total IQR outliers: {iqr_total:,}")
+        except Exception as exc:
+            print(f"  ⚠  IQR error: {exc}")
+
+        sub("10.2 – Z-Score outlier detection…")
+        try:
+            df = detector.detect_zscore(df, key_cols, threshold=3)
+            zs_total = sum(v for k, v in detector.get_summary().items()
+                           if k.startswith("zscore_"))
+            print(f"  Total Z-Score outliers: {zs_total:,}")
+        except Exception as exc:
+            print(f"  ⚠  Z-Score error: {exc}")
+
+        
+        feat_cols = [c for c in meaningful if df[c].var() > 0][:50]
+
+        sub("10.3 – Isolation Forest…")
+        try:
+            df = detector.detect_isolation_forest(df, feat_cols, contamination=0.05)
+        except Exception as exc:
+            print(f"  ⚠  Isolation Forest error: {exc}")
+
+        sub("10.4 – Local Outlier Factor…")
+        try:
+            df = detector.detect_lof(df, feat_cols, contamination=0.05)
+        except Exception as exc:
+            print(f"  ⚠  LOF error: {exc}")
+
+        sub("10.5 – Mahalanobis distance (on PCA components)…")
+        try:
+            pca_cols = [c for c in df.columns if c.startswith("PC_")]
+            if len(pca_cols) >= 2:
+                df = detector.detect_mahalanobis(df, pca_cols[:10], threshold=3.5)
+            else:
+                print("  ⚠  No PCA components found – skipping Mahalanobis.")
+        except Exception as exc:
+            print(f"  ⚠  Mahalanobis error: {exc}")
+
+        sub("10.6 – Rare-category detection…")
+        try:
+            for col in ["action", "operation_type"]:
+                if col in df.columns:
+                    df = detector.detect_rare_categories(df, col, min_freq=0.01)
+        except Exception as exc:
+            print(f"  ⚠  Rare-category error: {exc}")
+
+        sub("10.6 – Combined outlier score…")
+        try:
+            df = detector.compute_outlier_score(df)
+            df["outlier_type"] = df["outlier_score"].apply(
+                detector.map_outlier_type
+            )
+            type_counts = df["outlier_type"].value_counts()
+            print("  Outlier type distribution:")
+            for t, c in type_counts.items():
+                print(f"    {t:<10} {c:>6,}  ({c/len(df)*100:.1f}%)")
+        except Exception as exc:
+            print(f"  ⚠  Outlier score error: {exc}")
+
+        sub("10.7 – Filtering false detections (≥2 methods must agree)…")
+        try:
+            df = detector.validate_outliers(df, min_agreement=2,
+                                             use_multivariate=True)
+            df = detector.filter_false_detections(df, method="agreement",
+                                                   min_agreement=2)
+            report = detector.get_false_detection_report(df)
+            print("  False-detection report:")
+            for k, v in report.items():
+                if k != "method_contributions":
+                    print(f"    {k:<35} {v}")
+        except Exception as exc:
+            print(f"  ⚠  False-detection filter error: {exc}")
+            traceback.print_exc()
+
+
+        if "outlier_confirmed" in df.columns:
+            df["is_outlier"] = df["outlier_confirmed"].astype(int)
+        elif "outlier_score" in df.columns:
+            df["is_outlier"] = (df["outlier_score"] > 0).astype(int)
+        else:
+            df["is_outlier"] = 0
+
+        print(f"\n  Dataset shape after outlier detection: {df.shape}")
+        print(f"  Step 10 done  ({time.time() - t0:.1f}s)")
+
+
+        t0 = time.time()
+        header("STEP 11 · Subset Selection – Final Feature Set")
+
+        selected = [c for c in FINAL_FEATURES if c in df.columns]
+
+        if TARGET_COL not in selected and TARGET_COL in df.columns:
+            selected.insert(0, TARGET_COL)
+
+        df_final = df[selected].copy()
+        print(f"  Selected {len(selected)} features:")
+        for f in selected:
+            print(f"    • {f}")
+        print(f"  Final subset shape: {df_final.shape}")
+        print(f"  Step 11 done  ({time.time() - t0:.1f}s)")
+
+
+        t0 = time.time()
+        header("STEP 12 · Save Processed Dataset")
+
+        if TARGET_COL in df_final.columns:
+            before = len(df_final)
+            df_final = df_final.dropna(subset=[TARGET_COL])
+            print(f"  Dropped {before - len(df_final):,} rows with missing target.")
+
+        df_final = df_final.reset_index(drop=True)
+
+
+        remaining_nan = df_final.isnull().sum().sum()
+        print(f"  Remaining NaN values : {remaining_nan}")
+
+
+        df_final.to_csv(OUTPUT_CSV, index=False)
+        print(f"\n  ✓ Processed dataset saved → {OUTPUT_CSV}")
+        print(f"  Final shape : {df_final.shape[0]:,} rows × "
+              f"{df_final.shape[1]} columns")
+        if TARGET_COL in df_final.columns:
+            print(f"  Target distribution:")
+            for cls, cnt in df_final[TARGET_COL].value_counts().items():
+                print(f"    {cls} → {cnt:,}  ({cnt/len(df_final)*100:.1f}%)")
+        print(f"\n  Step 12 done  ({time.time() - t0:.1f}s)")
+
+
+        header("PIPELINE COMPLETE")
+        print(f"""
+  Output files
+  ───────────────────────────────────────────────────────────────
+  Processed CSV : {OUTPUT_CSV}
+  EDA plots     : {EDA_PLOTS_DIR}/
+  ───────────────────────────────────────────────────────────────
+  Final dataset : {df_final.shape[0]:,} rows × {df_final.shape[1]} columns
+  Ready for Phase II (model selection & training).
+""")
+
+    except Exception as exc:
+        header("ERROR OCCURRED")
+        print(f"  Exception: {exc}")
+        traceback.print_exc()
+
+
+if __name__ == "__main__":
+    main()
