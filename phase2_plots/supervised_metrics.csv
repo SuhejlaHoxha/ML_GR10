@@ -1,0 +1,7 @@
+Model,Accuracy,Precision,Recall,F1,ROC-AUC,cv_acc_mean,cv_acc_std,cv_f1_mean,cv_f1_std,cv_roc_mean,cv_roc_std
+Logistic Regression,0.9213,0.6585,1.0,0.7941,0.9642,0.9077,0.0076,0.7655,0.0144,0.9623,0.0028
+Decision Tree,1.0,1.0,1.0,1.0,1.0,1.0,0.0,1.0,0.0,1.0,0.0
+Random Forest,1.0,1.0,1.0,1.0,1.0,1.0,0.0,1.0,0.0,1.0,0.0
+Gradient Boosting,1.0,1.0,1.0,1.0,1.0,1.0,0.0,1.0,0.0,1.0,0.0
+SVM,1.0,1.0,1.0,1.0,1.0,0.9995,0.0006,0.9985,0.0021,1.0,0.0
+K-Nearest Neighbours,1.0,1.0,1.0,1.0,1.0,1.0,0.0,1.0,0.0,1.0,0.0

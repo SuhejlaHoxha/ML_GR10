@@ -1,0 +1,5 @@
+Algorithm,n_clusters,noise_points,silhouette,davies_bouldin,calinski_harabasz,ARI,NMI,purity,noise_fraction
+K-Means,3,0,0.224,1.5804,1050.9402,-0.0289,0.014,0.8482,
+DBSCAN,464,60,0.997,0.0316,440076.361,0.0016,0.1317,1.0,0.0075
+Agglomerative,3,0,0.224,1.5804,1050.9402,-0.0289,0.014,0.8482,
+GMM,8,0,0.0868,2.2772,587.1974,0.019,0.0992,0.8715,
