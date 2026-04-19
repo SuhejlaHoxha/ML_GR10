@@ -518,6 +518,8 @@ Each model tuned with `scoring="f1"` to prioritise minority-class (bot) detectio
 
 > **Note on perfect scores:** Phase I produced exceptionally strong derived features — `is_outlier`, `actor_event_count`, `actor_event_velocity`, and `is_integration_event` — which create near-perfect separation between bots and humans. Tree-based and distance-based models exploit these non-linear combinations immediately, achieving 100% test and CV scores. Logistic Regression (linear decision boundary) serves as the most informative interpretable baseline with a realistic F1 of 0.7941.
 
+![Metrics Comparison](phase2_plots/metrics_comparison.png)
+
 ### Step A.4 — Feature Importance
 
 Top discriminating features across tree-based models:
@@ -532,7 +534,9 @@ Top discriminating features across tree-based models:
 
 Charts: `phase2_plots/fi_*.png`
 
-### Step A.5 — Learning Curves
+![Feature Importance – Random Forest](phase2_plots/fi_Random_Forest.png)
+
+![Feature Importance – Gradient Boosting](phase2_plots/fi_Gradient_Boosting.png)
 
 - **Tree / ensemble / KNN models**: Both training and validation F1 converge to 1.0 from early training sizes — even 10% of the training data is sufficient.
 - **SVM**: Validation F1 converges quickly (≈0.99) due to a strong margin in scaled feature space.
@@ -540,11 +544,13 @@ Charts: `phase2_plots/fi_*.png`
 
 Charts: `phase2_plots/lc_*.png`
 
-### Step A.6 — ROC Curves
+![Learning Curve – Logistic Regression](phase2_plots/lc_Logistic_Regression.png)
+
+![Learning Curve – Random Forest](phase2_plots/lc_Random_Forest.png)
 
 All models except Logistic Regression achieve AUC = 1.000. Logistic Regression achieves AUC = 0.964 — good probability ranking even when the decision boundary is not optimal.
 
-Charts: `phase2_plots/roc_*.png`, `phase2_plots/roc_all_models.png`
+![ROC Curves – All Models](phase2_plots/roc_all_models.png)
 
 ### Step A.7 — Confusion Matrices
 
@@ -559,7 +565,9 @@ Charts: `phase2_plots/roc_*.png`, `phase2_plots/roc_all_models.png`
 
 Logistic Regression achieves **zero false negatives** (no bots missed) at the cost of 123 false positives. For a security use case — where missing a bot is costlier than a false alarm — this trade-off is acceptable.
 
-Charts: `phase2_plots/cm_*.png`
+![Confusion Matrix – Logistic Regression](phase2_plots/cm_Logistic_Regression.png)
+
+![Confusion Matrix – Random Forest](phase2_plots/cm_Random_Forest.png)
 
 ### Part A Summary
 
@@ -615,7 +623,13 @@ The **elbow plot** shows inertia decreasing rapidly from k=2 to k=4, then flatte
 
 Low ARI (−0.029) and NMI (0.014) confirm that K-Means does not cleanly recover the bot/human partition — the two-class boundary is not spherical, and K-Means assumes spherical clusters.
 
-Charts: `phase2_plots/kmeans_elbow.png`, `phase2_plots/kmeans_scatter.png`, `phase2_plots/kmeans_profile.png`, `phase2_plots/kmeans_sizes.png`
+![K-Means Elbow & Silhouette](phase2_plots/kmeans_elbow.png)
+
+![K-Means PCA Scatter](phase2_plots/kmeans_scatter.png)
+
+![K-Means Cluster Sizes](phase2_plots/kmeans_sizes.png)
+
+![K-Means Cluster Profile](phase2_plots/kmeans_profile.png)
 
 ### Step B.2 — DBSCAN
 
@@ -635,7 +649,11 @@ DBSCAN finds 464 tight micro-clusters with near-perfect internal cohesion. Purit
 
 The **60 noise points** are genuine outliers — actors whose event patterns do not fit any dense neighbourhood. These are prime candidates for manual security review.
 
-Charts: `phase2_plots/dbscan_scatter.png`, `phase2_plots/dbscan_profile.png`, `phase2_plots/dbscan_sizes.png`
+![DBSCAN PCA Scatter](phase2_plots/dbscan_scatter.png)
+
+![DBSCAN Cluster Sizes](phase2_plots/dbscan_sizes.png)
+
+![DBSCAN Cluster Profile](phase2_plots/dbscan_profile.png)
 
 ### Step B.3 — Agglomerative (Hierarchical) Clustering
 
@@ -651,7 +669,13 @@ Purity             : 0.848
 
 The **dendrogram** (300-point sample, Ward linkage) shows two major arms with one further subdivision — confirming that 3 clusters is a natural cut-point. Results are nearly identical to K-Means: Ward linkage is the hierarchical analogue of K-Means (both minimise within-cluster variance). This consistency confirms the 3-cluster structure is **stable** and not an artefact of K-Means initialisation.
 
-Charts: `phase2_plots/agglo_dendrogram.png`, `phase2_plots/agglo_scatter.png`, `phase2_plots/agglo_profile.png`, `phase2_plots/agglo_sizes.png`
+![Agglomerative Dendrogram](phase2_plots/agglo_dendrogram.png)
+
+![Agglomerative PCA Scatter](phase2_plots/agglo_scatter.png)
+
+![Agglomerative Cluster Sizes](phase2_plots/agglo_sizes.png)
+
+![Agglomerative Cluster Profile](phase2_plots/agglo_profile.png)
 
 ### Step B.4 — Gaussian Mixture Model (GMM)
 
@@ -666,7 +690,13 @@ Purity             : 0.872
 
 The **BIC curve** decreases through n=8, suggesting the data is better modelled as 8 Gaussian components than 2 or 3 — reflecting heterogeneity within each class: different types of bots (CI/CD, API integrations, automated scanners) and different human profiles (admins, developers, occasional users).
 
-Charts: `phase2_plots/gmm_bic.png`, `phase2_plots/gmm_scatter.png`, `phase2_plots/gmm_profile.png`, `phase2_plots/gmm_sizes.png`
+![GMM BIC Curve](phase2_plots/gmm_bic.png)
+
+![GMM PCA Scatter](phase2_plots/gmm_scatter.png)
+
+![GMM Cluster Sizes](phase2_plots/gmm_sizes.png)
+
+![GMM Cluster Profile](phase2_plots/gmm_profile.png)
 
 ### Step B.5 — Clustering Algorithm Comparison
 
@@ -680,6 +710,8 @@ Charts: `phase2_plots/gmm_bic.png`, `phase2_plots/gmm_scatter.png`, `phase2_plot
 Chart: `phase2_plots/cluster_comparison.png`
 
 **Key finding:** No algorithm cleanly recovers the bot/human partition via unsupervised clustering alone (all ARI ≈ 0). The bot/human boundary is a *learned* decision boundary that requires supervised signal — validating the Phase II design choice of treating this as supervised classification.
+
+![Clustering Algorithm Comparison](phase2_plots/cluster_comparison.png)
 
 ### Part B Summary
 
