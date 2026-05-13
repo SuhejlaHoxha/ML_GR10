@@ -898,10 +898,10 @@ Feature importance was computed from the SMOTE-retrained Random Forest (200 tree
 
 A confusion matrix shows the four possible prediction outcomes:
 
-- **TP** — bot correctly identified as bot ✅
-- **TN** — human correctly identified as human ✅
-- **FP** — human wrongly identified as bot ⚠️
-- **FN** — bot wrongly identified as human ❌ *(most dangerous for security)*
+- **TP** — bot correctly identified as bot 
+- **TN** — human correctly identified as human 
+- **FP** — human wrongly identified as bot 
+- **FN** — bot wrongly identified as human 
 
 ### Baseline RF
 
@@ -1058,6 +1058,3 @@ python src/phase3_retraining.py
 | 10 | Model saved | `retrained_model.joblib` — production-ready Random Forest |
 
 ---
-
-*Full pipeline: `python src/main.py` → `python src/main_phase2.py` → `python src/phase3_retraining.py`*  
-*Web application: `python app.py` → open `http://localhost:5000`*
