@@ -1,0 +1,20 @@
+[
+  "action",
+  "actor",
+  "actor_id",
+  "operation_type",
+  "repo",
+  "repo_id",
+  "org",
+  "org_id",
+  "user_agent",
+  "event_hour",
+  "event_dayofweek",
+  "event_month",
+  "event_year",
+  "is_weekend",
+  "actor_event_count",
+  "actor_event_velocity",
+  "is_integration_event",
+  "is_outlier"
+]

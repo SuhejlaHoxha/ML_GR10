@@ -1,0 +1,4 @@
+Model,Accuracy,Precision,Recall,F1,ROC-AUC,Avg-Precision,CV-F1 (mean),CV-F1 (std),CV-AUC (mean),CV-AUC (std)
+Baseline RF (Phase II),1.0,1.0,1.0,1.0,1.0,1.0,1.0,0.0,1.0,0.0
+RF + SMOTE (Strategy A),1.0,1.0,1.0,1.0,1.0,1.0,0.9998,0.0004,1.0,0.0
+RF + Threshold=0.03 (Strategy B),1.0,1.0,1.0,1.0,1.0,1.0,,,,
